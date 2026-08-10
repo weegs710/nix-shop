@@ -1,0 +1,6 @@
+# per-revision extraction cache, regenerable from the bare nixpkgs clone
+index/.per-rev/
+result
+result-*
+.ruff_cache/
+__pycache__/
