@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 weegs710
 
 def pin-from-flake [lock: string, input: string]: nothing -> any {
   # open guesses a parser from the extension, and .lock is not json to nushell.

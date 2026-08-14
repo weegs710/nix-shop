@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 weegs710
+
 {
   description = "Run any version of any package, without installing it";
 

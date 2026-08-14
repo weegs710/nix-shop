@@ -1,5 +1,7 @@
 # Vendored from nixpkgs-multiverse.
 # See: https://github.com/fzakaria/nixpkgs-multiverse
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Farid Zakaria
 {
   revPath,
   system ? builtins.currentSystem,

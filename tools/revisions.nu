@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 weegs710
+
 const BUCKET = "https://nix-releases.s3.amazonaws.com/"
 
 # A directory appears in this bucket only once Hydra published the channel, which is what makes its store paths substitutable.

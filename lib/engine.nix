@@ -1,5 +1,7 @@
 # Vendored nixpkgs-multiverse engine.
 # See: https://github.com/fzakaria/nixpkgs-multiverse
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 Farid Zakaria
 {
   revisionsFile,
   indexFile,

@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: 2026 weegs710
+
 def cache-dir []: nothing -> string {
   [($env.XDG_CACHE_HOME? | default $"($env.HOME)/.cache") "shop"] | path join
 }
