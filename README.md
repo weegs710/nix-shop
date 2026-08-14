@@ -46,15 +46,36 @@ nix-shop merges concepts from all three and does what none of them do alone: **e
 
 ## Flags
 
-```
-shop <command>[@<version>] [args...]
+shop's own flags go **before** the command:
 
+```
 -l, --list <cmd>    every version of that command, with its revision
 -p, --print <cmd>   which packages provide that command
 -s, --shell <cmd>   open a shell with it instead of running it
     --rev           which revision a bare command resolves against
 -h, --help          show this
 ```
+
+Everything after the command name is handed to the package untouched, and **there is no separator to remember**. shop stops parsing at the first token, so its flags and the package's own can never collide:
+
+```console
+$ shop jq@1.5 --version
+jq-1.5
+
+$ shop -l rg                  # -l here is shop's --list
+┌─────────┬─────────────────────────┐
+│ version │        revision         │
+├─────────┼─────────────────────────┤
+│ 0.4.0   │ 17.03                   │
+├─────────┼─────────────────────────┤
+│ 0.6.0   │ 17.09                   │
+...
+
+$ shop rg -l hello .          # -l here is ripgrep's --files-with-matches
+./a.txt
+```
+
+Coming from comma you may reach for a `--`. Don't. shop has nothing to consume it, so it lands on the program as a literal argument and breaks the call.
 
 Colors turn off when stderr isn't a terminal, and `NO_COLOR` is respected.
 
@@ -111,7 +132,7 @@ formatter.<system>            nixfmt
 
 ## Contributing
 
-Fork it and do whatever. Bugs and improvements welcome.
+Fork it and do whatever. Bug fixes and improvements welcome.
 
 If you're touching the nushell, `nu-check` passing doesn't mean much. Interpolated strings treat `(` as a subexpression opener, and it only blows up at runtime. Run the actual thing.
 
