@@ -8498,5 +8498,41 @@
   "date": "2026-08-19",
   "channel": "nixos-unstable",
   "narHash": "sha256-RD2kNWCG+Bjo6h+JVjWVNntZs2GtRoeY2xHjts/FNkA="
+ },
+ {
+  "rev": "2c423e03bbafcff28bfadc6781a4a8257f205cb5",
+  "date": "2026-08-22",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-dt4WdcvsA8/RCe+VZZwqU0X+XMM3wBbGCWA0/sFWzGo="
+ },
+ {
+  "rev": "56c02bc00adcf003215cc4bd996d6efaf4cff188",
+  "date": "2026-08-23",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-9i/VTdusq/+NM/tz+J1Re+ojkMB8MBf0QshnYfzHz30="
+ },
+ {
+  "rev": "9fbb54b33e91ee4ca368e35a78e0613c720600b3",
+  "date": "2026-08-26",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-cV5xEJJK3BvhU8rEd4mC9UsmDi5qscv/kzGPhBRC5WA="
+ },
+ {
+  "rev": "83199d0d373dd3ac2b9a1996b1d0263f76ab7a4c",
+  "date": "2026-08-28",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-VYXO0XZlgj06dxJZRhrD3WoSsvq/c7+/Akyoa22pefw="
+ },
+ {
+  "rev": "d2f67949798825fe853f7c5d0492b8bf016d3f88",
+  "date": "2026-08-29",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-pa4Q0qErvCvzCaaUph7Sm37RhR4xvPrYI8Lgz6k85+A="
+ },
+ {
+  "rev": "34ab99075ac4f7e40cf037eef32cb1c360bb85e9",
+  "date": "2026-08-31",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-hn1oU2rue2SYK8dAr8+WNZWtbsz1S2W5mnHlSEuh3bo="
  }
 ]
