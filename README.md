@@ -24,9 +24,9 @@ nix run git+https://codeberg.org/weegs710/nix-shop#shop -- --help
 
 ## Status
 
-**292,770 package versions** across **31,096 attributes**, from **1,405 revisions**, 2015-09-30 to 2026-08-07.
+**306,395 package versions** across **31,792 attributes**, from **1,450 revisions**, 2015-09-30 to 2026-10-20.
 
-Paired with nixpkgs [`148bab9c1c3c`](https://github.com/NixOS/nixpkgs/commit/148bab9c1c3c53136ecb44a6ea356a0ed5b39b06). The index ships inside this repo, so you build **neither** of the databases nix-shop uses.
+Paired with nixpkgs [`fe13242281a6`](https://github.com/NixOS/nixpkgs/commit/fe13242281a67641c0102cdb1087f0ebe586c7df). The index ships inside this repo, so you build **neither** of the databases nix-shop uses.
 
 ## What It Is
 

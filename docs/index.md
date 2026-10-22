@@ -11,7 +11,7 @@ There are two databases involved, and they do different jobs.
 
 **You build neither.** Install nix-shop and it works.
 
-The version index is committed in this repo: **1,405 revisions** covering 2015-09-30 to 2026-08-07 (1,383 unstable bumps plus 22 release tags), **31,096 attributes**, **292,770 package versions**, 4.6MB. It's a phone book. It contains no nixpkgs source, and revisions are fetched lazily, so only the ones you actually use land on your disk.
+The version index is committed in this repo: **1,450 revisions** covering 2015-09-30 to 2026-10-20 (1,428 unstable bumps plus 22 release tags), **31,792 attributes**, **306,395 package versions**, 4.8MB. It's a phone book. It contains no nixpkgs source, and revisions are fetched lazily, so only the ones you actually use land on your disk.
 
 The nix-index database comes from wherever your system already gets it, which for most people is [nix-index-database](https://github.com/nix-community/nix-index-database). If `nix-locate` works on your machine, you're set.
 
@@ -110,6 +110,47 @@ Three things differ from upstream:
 | lookup   | `knows` `versionsOf` `versionTable` `revOf`               |
 | packages | `at` `tip` `pkgs` `version` `versions` `latest`           |
 | pinning  | `revisions` `revs` `releases` `pinnedLabel` `pinnedExact` |
+
+## Keeping a Dropped Package as a Dependency
+
+`shop` runs commands. It can't hand a library to something else, and when nixpkgs drops a package that another one needs at build time, a command line won't fix the build. The engine will, because every version it knows is a plain derivation:
+
+```nix
+let
+  engine = nix-shop.lib.mkShopEngine {
+    revisionsFile = "${nix-shop}/index/revisions.json";
+    indexFile = "${nix-shop}/index/versions.json";
+    system = "x86_64-linux";
+  };
+in
+{
+  nixpkgs.overlays = [
+    (final: prev: {
+      wmctrl = engine.versions.wmctrl."1.07";
+    })
+  ];
+}
+```
+
+Anything in nixpkgs that depends on `wmctrl` is then built against that copy. I checked the derivation level: swapping `libutempter` changed tmux's derivation closure, and swapping `libappindicator` changed gajim's. Nothing was built from the swap.
+
+Python modules aren't in the version index, only top-level attributes are. Take the whole package set of a revision with `engine.at` and re-wrap the module, because nixpkgs refuses a Python module that was built against another revision's interpreter:
+
+```nix
+nixpkgs.overlays = [
+  (final: prev: {
+    pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
+      (pf: pp: {
+        typer = pf.toPythonModule (engine.at "2026-10-20").python3Packages.typer;
+      })
+    ];
+  })
+];
+```
+
+This needs the same Python minor version on both sides. I only tried 3.14 against 3.14.
+
+Versions are pinned to whichever revision last shipped them, so an old copy keeps resolving after nixpkgs drops it. Whether that revision's binaries are still on cache.nixos.org later is not something the index can promise.
 
 ## Why nushell and Python
 
