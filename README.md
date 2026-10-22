@@ -14,6 +14,7 @@ $ shop jq@1.5 --version    # the exact jq that shipped as 1.5
 $ shop jq@                 # pick a version from a menu
 $ shop -l rg               # every ripgrep, with the revision each one came from
 $ shop -s node@14.17.0     # ephemeral shell with an ancient node in it
+$ shop -a imagemagick.out convert -version   # name the package yourself, remember nothing
 ```
 
 Try it without installing anything:
@@ -49,14 +50,17 @@ nix-shop merges concepts from all three and does what none of them do alone: **e
 shop's own flags go **before** the command:
 
 ```
--l, --list <cmd>    every version of that command, with its revision
--p, --print <cmd>   which packages provide that command
--s, --shell <cmd>   open a shell with it instead of running it
-    --rev           which revision a bare command resolves against
--h, --help          show this
+-l, --list <cmd>        every version of that command, with its revision
+-p, --print <cmd>       which packages provide that command
+-s, --shell <cmd>       open a shell with it instead of running it
+-a, --attr <pkg> <cmd>  run <cmd> from the package you name, remembering nothing
+    --pick <cmd>        ask which package again, even if one is remembered
+    --cache             see, forget, clear or set what shop remembers
+    --rev               which revision a bare command resolves against
+-h, --help              show this
 ```
 
-Everything after the command name is handed to the package untouched, and **there is no separator to remember**. shop stops parsing at the first token, so its flags and the package's own can never collide:
+Everything after the command name is handed to the package untouched, and **there is no separator to remember**. shop stops parsing at the first token, so its flags and the package's own can never collide. The two options that take arguments of their own, `-a` and `--cache`, read just those and hand the rest on:
 
 ```console
 $ shop jq@1.5 --version
@@ -76,6 +80,8 @@ $ shop rg -l hello .          # -l here is ripgrep's --files-with-matches
 ```
 
 Coming from comma you may reach for a `--`. Don't. shop has nothing to consume it, so it lands on the program as a literal argument and breaks the call.
+
+When several packages ship one command, shop asks which you meant, remembers the answer, and says on stderr which package it used. With no terminal to ask on it stops instead of guessing. [The choices cache](./docs/versions.md#the-choices-cache) covers `--cache`, `--pick`, `-a`, and what changed for scripts.
 
 Colors turn off when stderr isn't a terminal, and `NO_COLOR` is respected.
 

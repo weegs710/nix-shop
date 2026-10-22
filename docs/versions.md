@@ -33,7 +33,7 @@ every jq that ever existed
   1.8.0    2025-07-08-9807714d6944
 ```
 
-When several packages ship the same command, shop asks which one you meant and remembers the answer:
+When several packages ship the same command, shop asks which one you meant at a terminal and remembers the answer:
 
 ```console
 $ shop convert
@@ -52,6 +52,83 @@ Top-level attributes are offered first, because only those carry a version axis.
 
 ## The Choices Cache
 
-Your picks live in `~/.cache/shop/choices.json`. Delete a key, or the whole file, to be asked again.
+Your picks live in `~/.cache/shop/choices.json`, one package per command. Every run says which one it used, on stderr:
 
-**One caveat.** If the first run wasn't a terminal -- inside a script, or with output piped -- shop takes the first candidate silently and caches that. `shop -p` is the only mode that reads and writes nothing.
+```console
+$ shop convert -version
+convert -> imagemagick.out (remembered)
+WARNING: The convert command is deprecated in IMv7, use "magick" instead of "convert" or "magick convert"
+...
+
+$ shop rg --version
+rg -> ripgrep.out (only candidate)
+ripgrep 15.2.0
+```
+
+The note in brackets is `remembered`, `picked` (you chose just now), or `only candidate`. The attribute fallback for unfree packages prints its own line instead, and `-a` prints nothing because you named the package.
+
+### Managing it
+
+```console
+$ shop --cache
+~/.cache/shop/choices.json
+┌───────────┬───────────────────┬────────────┐
+│  command  │      package      │   picked   │
+├───────────┼───────────────────┼────────────┤
+│ convert   │ imagemagick.out   │ 2026-10-21 │
+├───────────┼───────────────────┼────────────┤
+│ pdftotext │ poppler-utils.out │ 2026-10-21 │
+└───────────┴───────────────────┴────────────┘
+
+$ shop --cache rm pdftotext
+forgot 1, shop will ask again
+┌───────────┬───────────────────┬────────────┐
+│  command  │      package      │   picked   │
+├───────────┼───────────────────┼────────────┤
+│ pdftotext │ poppler-utils.out │ 2026-10-21 │
+└───────────┴───────────────────┴────────────┘
+```
+
+| Command                              | Does                                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `shop --cache`                       | list what is remembered, with the date each pick was made                                     |
+| `shop --cache rm <cmd>...`           | forget those commands, and print what was forgotten                                           |
+| `shop --cache clear`                 | forget everything, and print what was forgotten                                               |
+| `shop --cache set <cmd> <attr.out>`  | remember a pick without a terminal; the package must be one that ships the command, as `shop -p` prints it |
+| `shop --pick <cmd>`                  | ask again now, even if something is remembered; needs a terminal when several packages ship it |
+| `shop -a <attr.out> <cmd> [args...]` | run `<cmd>` from the package you name; reads and writes nothing                                |
+
+`-a` takes the package the way `shop -p` prints it. A name with no dot is a top-level attribute with its default output: `shop -a ripgrep rg --version`. A version works as it does for a command: `shop -a ripgrep.out@15.2.0 rg --version`. `-a` runs the command; `-l` and `-s` use what is remembered.
+
+Entries made by older versions have no date and show `-`. They keep working, and older versions ignore the date on new ones.
+
+### No terminal, no guess
+
+**This is a breaking change.**
+
+Before, when several packages shipped a command and shop had no terminal to ask on (a script, a pipe, a cron job, an agent), it took the first candidate and wrote it to the cache. That pick then stuck for every later run, and nothing said so. It now stops, exits 1, and lists the candidates:
+
+```console
+$ shop convert in.png out.jpg
+shop: 5 packages ship /bin/convert, nothing is remembered for it, and there is no terminal to ask on
+candidates:
+  imagemagick.out
+  imagemagickBig.out
+  imagemagick_light.out
+  honeycomb-refinery.out
+  graphicsmagick-imagemagick-compat.out
+name one and run it, remembering nothing:
+  shop -a imagemagick.out convert [args...]
+or remember one, then run the command again:
+  shop --cache set convert imagemagick.out
+or ask once from a real terminal:
+  shop --pick convert
+```
+
+**What breaks:** a non-interactive call for a command that several packages ship, with nothing remembered for it. It used to succeed with whichever package sorted first. It now fails. A command with one candidate, one already remembered, or one that resolves as an unfree attribute behaves as before.
+
+**What to do instead:** name the package with `shop -a <attr.out> <cmd>`, or remember it once with `shop --cache set <cmd> <attr.out>` and keep calling `shop <cmd>`. A script that wants the old behaviour has to pick the package itself, because shop no longer will.
+
+**What else changed:** every run now prints one dimmed line on stderr saying which package it used. Stdout is untouched. The cache options are all flags, not a `cache` subcommand, so a command literally called `cache` (flutter ships one) is not shadowed.
+
+`shop -p` still reads and writes nothing.

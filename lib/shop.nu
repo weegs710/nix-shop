@@ -88,22 +88,53 @@ def sel-path [parts: list<string>]: nothing -> string {
   $parts | each {|p| $"\"($p)\"" } | str join "."
 }
 
-def save-choice [cmd: string, picked: record] {
-  mkdir (cache-dir)
+def load-cache []: nothing -> record {
   let p = (choices-path)
-  let cur = if ($p | path exists) { open $p } else { {} }
-  $cur | merge { ($cmd): $picked } | save --force $p
+  if ($p | path exists) { open $p } else { {} }
 }
 
-def resolve-choice [cmd: string]: nothing -> record {
-  let p = (choices-path)
-  let cached = if ($p | path exists) { open $p | get -o $cmd } else { null }
+def write-cache [cur: record] {
+  mkdir (cache-dir)
+  $cur | save --force (choices-path)
+}
+
+# `attr.output` is the form -p prints, so the output is everything after the last dot.
+def split-choice [s: string]: nothing -> record {
+  let parts = ($s | split row ".")
+  { attr: ($parts | drop 1 | str join "."), output: ($parts | last) }
+}
+
+# Entries written by older versions are bare `attr.output` strings.
+def as-choice [v: any]: nothing -> record {
+  if (($v | describe) | str starts-with "record") { $v } else { split-choice $v }
+}
+
+def choice-label [c: record]: nothing -> string {
+  if ($c.output | is-empty) { $c.attr } else { $"($c.attr).($c.output)" }
+}
+
+def save-choice [cmd: string, picked: record] {
+  let entry = { attr: $picked.attr, output: $picked.output, picked: (date now | format date "%Y-%m-%d") }
+  write-cache (load-cache | merge { ($cmd): $entry })
+}
+
+def announce [cmd: string, picked: record] {
+  # The attribute fallback already said what it did.
+  if $picked.how == "attribute" { return }
+  hint $"($cmd) -> (choice-label $picked) \(($picked.how)\)"
+}
+
+# A first-candidate guess would be cached and reused silently, so a missing terminal is an error.
+def refuse-to-guess [cmd: string, ordered: list<string>] {
+  let first = ($ordered | first)
+  let listed = ($ordered | each {|c| $"  ($c)" } | str join "\n")
+  die $"($ordered | length) packages ship /bin/($cmd), nothing is remembered for it, and there is no terminal to ask on" $"candidates:\n($listed)\nname one and run it, remembering nothing:\n  shop -a ($first) ($cmd) [args...]\nor remember one, then run the command again:\n  shop --cache set ($cmd) ($first)\nor ask once from a real terminal:\n  shop --pick ($cmd)"
+}
+
+def resolve-choice [cmd: string, force: bool]: nothing -> record {
+  let cached = if $force { null } else { load-cache | get -o $cmd }
   if $cached != null {
-    if (($cached | describe) | str starts-with "record") {
-      return $cached
-    }
-    let parts = ($cached | split row ".")
-    return { attr: ($parts | drop 1 | str join "."), output: ($parts | last) }
+    return ((as-choice $cached) | merge { how: "remembered" })
   }
 
   let all = (locate $cmd)
@@ -116,27 +147,99 @@ def resolve-choice [cmd: string]: nothing -> record {
     hint $"no /bin/($cmd) in the database -- resolving the attribute '($cmd)' directly"
     let picked = { attr: $cmd, output: "" }
     save-choice $cmd $picked
-    return $picked
+    return ($picked | merge { how: "attribute" })
   }
 
   # Only top-level attrs carry a version axis, so they are offered first.
   let ordered = ($all | sort-by {|a| $a | split row "." | length })
 
-  let choice = if (($ordered | length) == 1) {
-    $ordered | first
-  } else if (interactive) {
-    $ordered | input list --fuzzy $"($ordered | length) packages ship /bin/($cmd)"
-  } else {
-    $ordered | first
+  if (($ordered | length) == 1) {
+    let picked = (split-choice ($ordered | first))
+    save-choice $cmd $picked
+    return ($picked | merge { how: "only candidate" })
   }
+
+  if not (interactive) {
+    refuse-to-guess $cmd $ordered
+  }
+
+  let choice = ($ordered | input list --fuzzy $"($ordered | length) packages ship /bin/($cmd)")
   if ($choice | is-empty) {
     die "nothing picked"
   }
 
-  let parts = ($choice | split row ".")
-  let picked = { attr: ($parts | drop 1 | str join "."), output: ($parts | last) }
+  let picked = (split-choice $choice)
   save-choice $cmd $picked
-  $picked
+  $picked | merge { how: "picked" }
+}
+
+def cache-rows [cur: record]: nothing -> table {
+  $cur
+  | items {|k, v|
+    let c = (as-choice $v)
+    { command: $k, package: (choice-label $c), picked: ($c.picked? | default "-") }
+  }
+  | sort-by command
+}
+
+def cache-cmd [args: list<string>] {
+  let cur = (load-cache)
+  let known = ($cur | columns)
+  let sub = ($args | get -o 0 | default "list")
+
+  match $sub {
+    "list" => {
+      hint (choices-path | str replace $env.HOME "~")
+      if ($cur | is-empty) {
+        hint "nothing remembered -- shop asks the first time a command has several packages"
+        return
+      }
+      return (render (cache-rows $cur))
+    }
+    "rm" => {
+      let names = ($args | skip 1)
+      if ($names | is-empty) {
+        die "--cache rm needs at least one command" "shop --cache rm <command>..."
+      }
+      let missing = ($names | where ($it not-in $known))
+      if ($missing | is-not-empty) {
+        die $"nothing remembered for ($missing | str join ', ')" $"remembered: ($known | str join ' ')"
+      }
+      let rows = (cache-rows $cur | where ($it.command in $names))
+      write-cache ($names | reduce --fold $cur {|n, acc| $acc | reject $n })
+      hint $"forgot ($names | length), shop will ask again"
+      return (render $rows)
+    }
+    "clear" => {
+      if ($cur | is-empty) {
+        hint "nothing to clear"
+        return
+      }
+      let rows = (cache-rows $cur)
+      write-cache {}
+      hint $"cleared ($rows | length) remembered picks"
+      return (render $rows)
+    }
+    "set" => {
+      if ($args | length) != 3 {
+        die "--cache set needs a command and a package" "shop --cache set <command> <attr.output>   the package as shop -p prints it"
+      }
+      let cmd = ($args | get 1)
+      let pkg = ($args | get 2)
+      let found = (locate $cmd)
+      if ($found | is-empty) {
+        die $"no /bin/($cmd) in the nix-index database, so there is nothing to choose between" "an unfree attribute resolves by name and needs no remembered pick"
+      }
+      if $pkg not-in $found {
+        die $"'($pkg)' does not ship /bin/($cmd)" $"candidates: ($found | str join ' ')"
+      }
+      save-choice $cmd (split-choice $pkg)
+      hint $"($cmd) -> ($pkg) \(remembered\)"
+    }
+    _ => {
+      die $"unknown cache command '($sub)'" "shop --cache [list | rm <command>... | clear | set <command> <attr.output>]"
+    }
+  }
 }
 
 def resolve-version [attr: string, tbl: table, want: string]: nothing -> string {
@@ -187,11 +290,14 @@ def usage []: nothing -> string {
     $"  ($c.c)shop -l rg($c.z)          every ripgrep that ever existed"
     ""
     $"($c.b)OPTIONS($c.z)"
-    $"  ($c.c)-l, --list <cmd>($c.z)    every version of that command, with its revision"
-    $"  ($c.c)-p, --print <cmd>($c.z)   which packages provide that command"
-    $"  ($c.c)-s, --shell <cmd>($c.z)   open a shell with it instead of running it"
-    $"  ($c.c)--rev($c.z)               which revision a bare command resolves against"
-    $"  ($c.c)-h, --help($c.z)          show this"
+    $"  ($c.c)-l, --list <cmd>($c.z)        every version of that command, with its revision"
+    $"  ($c.c)-p, --print <cmd>($c.z)       which packages provide that command"
+    $"  ($c.c)-s, --shell <cmd>($c.z)       open a shell with it instead of running it"
+    $"  ($c.c)-a, --attr <pkg> <cmd>($c.z)  run <cmd> from the package you name, remembering nothing"
+    $"  ($c.c)--pick <cmd>($c.z)            ask which package again, even if one is remembered"
+    $"  ($c.c)--cache($c.z)                 see, forget, clear or set what shop remembers"
+    $"  ($c.c)--rev($c.z)                   which revision a bare command resolves against"
+    $"  ($c.c)-h, --help($c.z)              show this"
     ""
     $"($c.b)HOW IT WORKS($c.z)"
     $"  1  you type a command name, like ($c.c)rg($c.z)"
@@ -232,9 +338,11 @@ def usage []: nothing -> string {
     $"      ($c.c)shop -s rg@0.4.0($c.z)"
     ""
     "  when several packages ship one command, shop asks you to pick and"
-    "  then remembers the answer:"
+    "  then remembers the answer. with no terminal to ask on it refuses"
+    "  rather than guess. -p lists the candidates and -a names one:"
     ""
     $"      ($c.c)shop -p convert($c.z)"
+    $"      ($c.c)shop -a imagemagick.out convert in.png out.jpg($c.z)"
     ""
     $"($c.b)GOTCHAS($c.z)"
     "  the command you type is not always the package you think."
@@ -263,9 +371,20 @@ def usage []: nothing -> string {
     $"      ($c.c)shop jq@1.5 --version($c.z)     ($c.g)<- works($c.z)"
     $"      ($c.c)shop jq@1.5 -- --version($c.z)  ($c.r)<- does not($c.z)"
     ""
+    $"  ($c.c)-a($c.z) and ($c.c)--cache($c.z) read the few tokens they need, the package and the"
+    "  command, or the subcommand and its arguments. everything after those"
+    "  goes to the package untouched."
+    ""
     $"($c.b)CACHE($c.z)"
-    "  ~/.cache/shop/choices.json   which package you picked for each command."
-    "  delete a key, or the whole file, to be asked again."
+    "  ~/.cache/shop/choices.json   which package shop remembers for each command."
+    "  every run prints on stderr which package it used, and whether that was"
+    "  remembered, picked just now, or the only candidate."
+    ""
+    $"      ($c.c)shop --cache($c.z)                               list what is remembered"
+    $"      ($c.c)shop --cache rm convert($c.z)                    forget one or more commands"
+    $"      ($c.c)shop --cache clear($c.z)                         forget everything"
+    $"      ($c.c)shop --cache set convert imagemagick.out($c.z)   remember one without a terminal"
+    $"      ($c.c)shop --pick convert($c.z)                        ask again now, from a terminal"
   ] | str join "\n"
 }
 
@@ -282,6 +401,9 @@ def --wrapped main [...rest] {
     "-l" | "--list" => "list",
     "-p" | "--print" => "print",
     "-s" | "--shell" => "shell",
+    "-a" | "--attr" => "attr",
+    "--pick" => "pick",
+    "--cache" => "cache",
     _ if ($head | str starts-with "-") => "bad",
     _ => "run",
   })
@@ -289,18 +411,24 @@ def --wrapped main [...rest] {
   if $mode == "help" { return (usage) }
   if $mode == "rev" { return (show-rev) }
   if $mode == "bad" { die $"unknown option '($head)'" }
+  if $mode == "cache" { return (cache-cmd ($rest | skip 1)) }
 
   let argv = if $mode == "run" { $rest } else { $rest | skip 1 }
   if ($argv | is-empty) {
     die $"($head) needs a command"
   }
 
-  let bits = ($argv | first | split row "@")
-  let cmd = ($bits | first)
-  let version = ($bits | get -o 1)
-  let passthru = ($argv | skip 1)
+  let named = ($mode == "attr")
+  if $named and (($argv | length) < 2) {
+    die "-a needs a package and a command" "shop -a <attr.output>[@<version>] <command> [args...]   the package as shop -p prints it"
+  }
 
-  if ($cmd | is-empty) {
+  let bits = ($argv | first | split row "@")
+  let cmd = if $named { $argv | get 1 } else { $bits | first }
+  let version = ($bits | get -o 1)
+  let passthru = ($argv | skip (if $named { 2 } else { 1 }))
+
+  if ($cmd | is-empty) or ($bits | first | is-empty) {
     die "no command given"
   }
 
@@ -316,7 +444,15 @@ def --wrapped main [...rest] {
     return (render ($found | wrap attr))
   }
 
-  let picked = (resolve-choice $cmd)
+  # A bare name with no dot is a top-level attribute and its default output; -p always prints a dotted form.
+  let picked = if $named {
+    let given = ($bits | first)
+    if ($given | str contains ".") { split-choice $given } else { { attr: $given, output: "" } }
+  } else {
+    let r = (resolve-choice $cmd ($mode == "pick"))
+    announce $cmd $r
+    $r
+  }
   let attr = $picked.attr
   let output = $picked.output
 
