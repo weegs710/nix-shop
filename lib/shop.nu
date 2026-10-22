@@ -290,14 +290,18 @@ def usage []: nothing -> string {
     $"  ($c.c)shop -l rg($c.z)          every ripgrep that ever existed"
     ""
     $"($c.b)OPTIONS($c.z)"
-    $"  ($c.c)-l, --list <cmd>($c.z)        every version of that command, with its revision"
-    $"  ($c.c)-p, --print <cmd>($c.z)       which packages provide that command"
-    $"  ($c.c)-s, --shell <cmd>($c.z)       open a shell with it instead of running it"
-    $"  ($c.c)-a, --attr <pkg> <cmd>($c.z)  run <cmd> from the package you name, remembering nothing"
-    $"  ($c.c)--pick <cmd>($c.z)            ask which package again, even if one is remembered"
-    $"  ($c.c)--cache($c.z)                 see, forget, clear or set what shop remembers"
-    $"  ($c.c)--rev($c.z)                   which revision a bare command resolves against"
-    $"  ($c.c)-h, --help($c.z)              show this"
+    $"  ($c.c)-l, --list <cmd>($c.z)      every version of that command, with its revision"
+    $"  ($c.c)-p, --print <cmd>($c.z)     which packages provide that command"
+    $"  ($c.c)-s, --shell <cmd>...($c.z)  open a shell with all of those on PATH instead of running one"
+    $"  ($c.c)-a, --attr <pkg>($c.z)      name the package yourself, remembering nothing"
+    $"  ($c.c)--pick($c.z)                ask which package again, even if one is remembered"
+    $"  ($c.c)--cache($c.z)               see, forget, clear or set what shop remembers"
+    $"  ($c.c)--rev($c.z)                 which revision a bare command resolves against"
+    $"  ($c.c)-h, --help($c.z)            show this"
+    ""
+    "  flags go first and combine: -l -a <pkg>, -s -a <pkg>, -l --pick <cmd>."
+    "  the first token that is not a flag is the command, and for a plain run"
+    "  everything after it goes to the package untouched."
     ""
     $"($c.b)HOW IT WORKS($c.z)"
     $"  1  you type a command name, like ($c.c)rg($c.z)"
@@ -337,6 +341,12 @@ def usage []: nothing -> string {
     ""
     $"      ($c.c)shop -s rg@0.4.0($c.z)"
     ""
+    "  one shell with several packages on PATH, each from its own revision. a"
+    "  package named with -a takes no command:"
+    ""
+    $"      ($c.c)shop -s rg@15.1.0 jq@1.8.1($c.z)"
+    $"      ($c.c)shop -s -a ripgrep.out@15.1.0 jq($c.z)"
+    ""
     "  when several packages ship one command, shop asks you to pick and"
     "  then remembers the answer. with no terminal to ask on it refuses"
     "  rather than guess. -p lists the candidates and -a names one:"
@@ -371,9 +381,10 @@ def usage []: nothing -> string {
     $"      ($c.c)shop jq@1.5 --version($c.z)     ($c.g)<- works($c.z)"
     $"      ($c.c)shop jq@1.5 -- --version($c.z)  ($c.r)<- does not($c.z)"
     ""
-    $"  ($c.c)-a($c.z) and ($c.c)--cache($c.z) read the few tokens they need, the package and the"
-    "  command, or the subcommand and its arguments. everything after those"
-    "  goes to the package untouched."
+    $"  shop reads its own flags first, up to the first token that is not one."
+    $"  ($c.c)-a($c.z) takes the package after it, and ($c.c)--cache($c.z) takes the rest of the line."
+    "  with -s every token after the flags is a package, not an argument, so"
+    "  there is nothing to pass through."
     ""
     $"($c.b)CACHE($c.z)"
     "  ~/.cache/shop/choices.json   which package shop remembers for each command."
@@ -388,6 +399,43 @@ def usage []: nothing -> string {
   ] | str join "\n"
 }
 
+# A bare name with no dot is a top-level attribute and its default output; -p always prints a dotted form.
+def parse-attr [s: string]: nothing -> record {
+  if ($s | str contains ".") { split-choice $s } else { { attr: $s, output: "" } }
+}
+
+# The attribute path nix is handed, newest by default or pinned to a version's revision.
+def selection-for [picked: record, version: any]: nothing -> string {
+  let base = if $version == null {
+    ["pkgs"] | append ($picked.attr | split row ".")
+  } else {
+    reject-nested $picked.attr
+    let tbl = (version-table $picked.attr)
+    let ver = (resolve-version $picked.attr $tbl $version)
+    hint $"($picked.attr) ($ver) -- from ($tbl | where version == $ver | first | get revision)"
+    ["versions" $picked.attr $ver]
+  }
+  sel-path (if ($picked.output | is-empty) { $base } else { $base | append $picked.output })
+}
+
+# A `command[@version]` token, resolved through the cache and the nix-index database.
+def resolve-command [tok: string, force: bool]: nothing -> record {
+  let bits = ($tok | split row "@")
+  let cmd = ($bits | first)
+  if ($cmd | is-empty) { die "no command given" }
+  let picked = (resolve-choice $cmd $force)
+  announce $cmd $picked
+  { cmd: $cmd, picked: $picked, version: ($bits | get -o 1) }
+}
+
+# An `attr.output[@version]` token from -a.
+def resolve-named [tok: string]: nothing -> record {
+  let bits = ($tok | split row "@")
+  let given = ($bits | first)
+  if ($given | is-empty) { die "no package given" }
+  { picked: (parse-attr $given), version: ($bits | get -o 1) }
+}
+
 def --wrapped main [...rest] {
   if ($rest | is-empty) {
     print -e (usage)
@@ -395,44 +443,54 @@ def --wrapped main [...rest] {
   }
 
   let head = ($rest | first)
-  let mode = (match $head {
-    "-h" | "--help" => "help",
-    "--rev" => "rev",
-    "-l" | "--list" => "list",
-    "-p" | "--print" => "print",
-    "-s" | "--shell" => "shell",
-    "-a" | "--attr" => "attr",
-    "--pick" => "pick",
-    "--cache" => "cache",
-    _ if ($head | str starts-with "-") => "bad",
-    _ => "run",
-  })
+  if $head in ["-h" "--help"] { return (usage) }
+  if $head == "--rev" { return (show-rev) }
+  if $head == "--cache" { return (cache-cmd ($rest | skip 1)) }
 
-  if $mode == "help" { return (usage) }
-  if $mode == "rev" { return (show-rev) }
-  if $mode == "bad" { die $"unknown option '($head)'" }
-  if $mode == "cache" { return (cache-cmd ($rest | skip 1)) }
+  # Leading flags run up to the first token that is not one of shop's own; from there it is the command and the package's arguments.
+  mut mode = "run"
+  mut flag = $head
+  mut attrs = []
+  mut force = false
+  mut i = 0
+  loop {
+    let tok = ($rest | get -o $i)
+    if $tok == null { break }
+    if not ($tok | str starts-with "-") { break }
+    $flag = $tok
 
-  let argv = if $mode == "run" { $rest } else { $rest | skip 1 }
-  if ($argv | is-empty) {
-    die $"($head) needs a command"
+    let picks_mode = (match $tok {
+      "-l" | "--list" => "list",
+      "-p" | "--print" => "print",
+      "-s" | "--shell" => "shell",
+      _ => null,
+    })
+    if $picks_mode != null {
+      if $mode != "run" { die "choose one of -l, -p and -s" }
+      $mode = $picks_mode
+    } else if $tok in ["-a" "--attr"] {
+      let given = ($rest | get -o ($i + 1))
+      if $given == null {
+        die $"($tok) needs a package" "shop -a <attr.output>[@<version>] ...   the package as shop -p prints it"
+      }
+      $attrs = ($attrs | append $given)
+      $i = $i + 1
+    } else if $tok == "--pick" {
+      $force = true
+    } else {
+      die $"unknown option '($tok)'"
+    }
+    $i = $i + 1
   }
 
-  let named = ($mode == "attr")
-  if $named and (($argv | length) < 2) {
-    die "-a needs a package and a command" "shop -a <attr.output>[@<version>] <command> [args...]   the package as shop -p prints it"
-  }
-
-  let bits = ($argv | first | split row "@")
-  let cmd = if $named { $argv | get 1 } else { $bits | first }
-  let version = ($bits | get -o 1)
-  let passthru = ($argv | skip (if $named { 2 } else { 1 }))
-
-  if ($cmd | is-empty) or ($bits | first | is-empty) {
-    die "no command given"
-  }
+  let positional = ($rest | skip $i)
+  let n_attr = ($attrs | length)
 
   if $mode == "print" {
+    if $n_attr > 0 { die "-p lists the packages that ship a command, so -a does not apply" }
+    if ($positional | is-empty) { die "-p needs a command" }
+    let cmd = ($positional | first | split row "@" | first)
+    if ($cmd | is-empty) { die "no command given" }
     let found = (locate $cmd)
     if ($found | is-empty) {
       if not (knows-attr $cmd) {
@@ -444,38 +502,50 @@ def --wrapped main [...rest] {
     return (render ($found | wrap attr))
   }
 
-  # A bare name with no dot is a top-level attribute and its default output; -p always prints a dotted form.
-  let picked = if $named {
-    let given = ($bits | first)
-    if ($given | str contains ".") { split-choice $given } else { { attr: $given, output: "" } }
-  } else {
-    let r = (resolve-choice $cmd ($mode == "pick"))
-    announce $cmd $r
-    $r
-  }
-  let attr = $picked.attr
-  let output = $picked.output
-
   if $mode == "list" {
-    reject-nested $attr
-    return (render (version-table $attr))
-  }
-
-  let selection = if $version == null {
-    let base = (["pkgs"] | append ($attr | split row "."))
-    sel-path (if ($output | is-empty) { $base } else { $base | append $output })
-  } else {
-    reject-nested $attr
-    let tbl = (version-table $attr)
-    let ver = (resolve-version $attr $tbl $version)
-    hint $"($attr) ($ver) -- from ($tbl | where version == $ver | first | get revision)"
-    let base = ["versions" $attr $ver]
-    sel-path (if ($output | is-empty) { $base } else { $base | append $output })
+    if $n_attr > 1 { die "-l lists one package at a time" }
+    if $n_attr == 1 {
+      if ($positional | is-not-empty) { die "-l -a takes only the package" "shop -l -a <attr.output>" }
+      let n = (resolve-named ($attrs | first))
+      if $n.version != null { die "-l lists every version, so leave the @version off" }
+      reject-nested $n.picked.attr
+      return (render (version-table $n.picked.attr))
+    }
+    if ($positional | is-empty) { die "-l needs a command" }
+    let r = (resolve-command ($positional | first) $force)
+    reject-nested $r.picked.attr
+    return (render (version-table $r.picked.attr))
   }
 
   if $mode == "shell" {
-    exec nix shell -f $env.SHOP_ENGINE $selection
+    mut selections = []
+    for a in $attrs {
+      let n = (resolve-named $a)
+      $selections = ($selections | append (selection-for $n.picked $n.version))
+    }
+    for t in $positional {
+      let r = (resolve-command $t $force)
+      $selections = ($selections | append (selection-for $r.picked $r.version))
+    }
+    if ($selections | is-empty) {
+      die "-s needs a command or a package" "shop -s <command>[@<version>]... [-a <attr.output>[@<version>]]..."
+    }
+    exec nix shell -f $env.SHOP_ENGINE ...$selections
   }
 
-  exec nix shell -f $env.SHOP_ENGINE $selection --command $cmd ...$passthru
+  if $n_attr > 1 { die "a run takes one -a package; -s opens a shell with several" }
+  if $n_attr == 1 {
+    if ($positional | is-empty) {
+      die "-a needs a package and a command" "shop -a <attr.output>[@<version>] <command> [args...]   the package as shop -p prints it"
+    }
+    if $force { die "--pick asks about a command, and -a already names the package" }
+    let n = (resolve-named ($attrs | first))
+    let selection = (selection-for $n.picked $n.version)
+    exec nix shell -f $env.SHOP_ENGINE $selection --command ($positional | first) ...($positional | skip 1)
+  }
+
+  if ($positional | is-empty) { die $"($flag) needs a command" }
+  let r = (resolve-command ($positional | first) $force)
+  let selection = (selection-for $r.picked $r.version)
+  exec nix shell -f $env.SHOP_ENGINE $selection --command $r.cmd ...($positional | skip 1)
 }

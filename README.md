@@ -15,6 +15,7 @@ $ shop jq@                 # pick a version from a menu
 $ shop -l rg               # every ripgrep, with the revision each one came from
 $ shop -s node@14.17.0     # ephemeral shell with an ancient node in it
 $ shop -a imagemagick.out convert -version   # name the package yourself, remember nothing
+$ shop -s rg@15.1.0 jq@1.8.1               # one shell, each from its own nixpkgs revision
 ```
 
 Try it without installing anything:
@@ -50,17 +51,17 @@ nix-shop merges concepts from all three and does what none of them do alone: **e
 shop's own flags go **before** the command:
 
 ```
--l, --list <cmd>        every version of that command, with its revision
--p, --print <cmd>       which packages provide that command
--s, --shell <cmd>       open a shell with it instead of running it
--a, --attr <pkg> <cmd>  run <cmd> from the package you name, remembering nothing
-    --pick <cmd>        ask which package again, even if one is remembered
-    --cache             see, forget, clear or set what shop remembers
-    --rev               which revision a bare command resolves against
--h, --help              show this
+-l, --list <cmd>      every version of that command, with its revision
+-p, --print <cmd>     which packages provide that command
+-s, --shell <cmd>...  open a shell with all of those on PATH instead of running one
+-a, --attr <pkg>      name the package yourself, remembering nothing
+    --pick            ask which package again, even if one is remembered
+    --cache           see, forget, clear or set what shop remembers
+    --rev             which revision a bare command resolves against
+-h, --help            show this
 ```
 
-Everything after the command name is handed to the package untouched, and **there is no separator to remember**. shop stops parsing at the first token, so its flags and the package's own can never collide. The two options that take arguments of their own, `-a` and `--cache`, read just those and hand the rest on:
+Flags come first and combine, as in `shop -l -a imagemagick.out` or `shop -s --pick convert`. The first token that isn't one of them is the command, and everything after it is handed to the package untouched, so **there is no separator to remember** and shop's flags and the package's own can never collide. The exception is `-s`, which opens a shell instead of running anything, so every token after its flags is a package. `-a` takes the package after it, and `--cache` takes the rest of the line. Where a flag sits decides what it means:
 
 ```console
 $ shop jq@1.5 --version

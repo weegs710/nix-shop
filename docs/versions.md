@@ -50,6 +50,24 @@ $ shop convert
 
 Top-level attributes are offered first, because only those carry a version axis. comma will hand you `python314Packages.yt-dlp`; shop gives you `yt-dlp`.
 
+## Several Packages in One Shell
+
+`shop -s` takes any number of commands, each with its own `@version`, and opens one shell with all of them on `PATH`. It runs none of them, so there are no arguments to pass and every token after the flags is a package. Each version comes from the revision that last shipped it, so they can be years apart:
+
+```console
+$ printf 'rg --version | head -1\njq --version\nexit\n' | shop -s rg@15.1.0 jq@1.8.1
+rg -> ripgrep.out (only candidate)
+ripgrep 15.1.0 -- from 2026-07-15-753cc8a3a874
+jq -> jq.bin (only candidate)
+jq 1.8.1 -- from 2026-07-05-d407951447dc
+ripgrep 15.1.0
+jq-1.8.1
+```
+
+Run from a terminal instead of a pipe, it leaves you in a shell with both on `PATH`; `exit` and they are gone. Piping commands in, as above, is the scripted form. A package you name with `-a` goes in the same list and takes no command, so `shop -s -a ripgrep.out@15.1.0 jq` mixes a named package with a command. Commands still go through the remembered picks, and a command with several candidates asks at a terminal and refuses without one, as it does for a single command.
+
+Flags go first and combine. `shop -l -a ripgrep.out` lists every version of a package you name, and `shop -l --pick convert` asks again which package `convert` means before listing. Anything that starts with a dash is read as a flag until the first token that doesn't, and a plain run hands everything after its command to the package untouched.
+
 ## The Choices Cache
 
 Your picks live in `~/.cache/shop/choices.json`, one package per command. Every run says which one it used, on stderr:
@@ -95,10 +113,12 @@ forgot 1, shop will ask again
 | `shop --cache rm <cmd>...`           | forget those commands, and print what was forgotten                                           |
 | `shop --cache clear`                 | forget everything, and print what was forgotten                                               |
 | `shop --cache set <cmd> <attr.out>`  | remember a pick without a terminal; the package must be one that ships the command, as `shop -p` prints it |
-| `shop --pick <cmd>`                  | ask again now, even if something is remembered; needs a terminal when several packages ship it |
+| `shop --pick <cmd>`                  | ask again now, even if something is remembered; needs a terminal when several packages ship it. Also works as `shop -l --pick <cmd>` and `shop -s --pick <cmd>` |
 | `shop -a <attr.out> <cmd> [args...]` | run `<cmd>` from the package you name; reads and writes nothing                                |
+| `shop -l -a <attr.out>`              | list every version of the package you name; no command needed                                  |
+| `shop -s -a <attr.out>[@version]`    | open a shell with the package you name; no command needed                                      |
 
-`-a` takes the package the way `shop -p` prints it. A name with no dot is a top-level attribute with its default output: `shop -a ripgrep rg --version`. A version works as it does for a command: `shop -a ripgrep.out@15.2.0 rg --version`. `-a` runs the command; `-l` and `-s` use what is remembered.
+`-a` takes the package the way `shop -p` prints it. A name with no dot is a top-level attribute with its default output: `shop -a ripgrep rg --version`. A version works as it does for a command: `shop -a ripgrep.out@15.2.0 rg --version`. With `-l` and `-s`, `-a` stands in for the command, so none is given.
 
 Entries made by older versions have no date and show `-`. They keep working, and older versions ignore the date on new ones.
 
