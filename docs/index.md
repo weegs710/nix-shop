@@ -11,7 +11,7 @@ There are two databases involved, and they do different jobs.
 
 **You build neither.** Install nix-shop and it works.
 
-The version index is committed in this repo: **1,450 revisions** covering 2015-09-30 to 2026-10-20 (1,428 unstable bumps plus 22 release tags), **31,792 attributes**, **306,395 package versions**, 4.8MB. It's a phone book. It contains no nixpkgs source, and revisions are fetched lazily, so only the ones you actually use land on your disk.
+The version index is committed in this repo as `index/revisions.json` and `index/versions.json`. It holds one revision per nixos-unstable channel bump since 2017, plus a revision for every release tag. It's a phone book. It contains no nixpkgs source, and revisions are fetched lazily, so only the ones you actually use land on your disk. The counts change with every refresh, so read them off the files instead of this page.
 
 The nix-index database comes from wherever your system already gets it, which for most people is [nix-index-database](https://github.com/nix-community/nix-index-database). If `nix-locate` works on your machine, you're set.
 
@@ -66,6 +66,8 @@ restock --index ./my-shop-index --paired-rev <40-char-nixpkgs-rev>
 | `<nixpkgs>/.git-revision` | channels                                      |
 
 Use `--input <name>` if your nixpkgs input isn't called `nixpkgs`.
+
+The pinned revision is always indexed itself, even when it isn't one of the nixos-unstable bumps, such as a stable channel head or a revision from your lock file.
 
 The revision list comes from the **`nix-releases` S3 bucket**. A directory only shows up there once Hydra published that channel, which is what makes its store paths substitutable. Release points come from git tags in the clone.
 

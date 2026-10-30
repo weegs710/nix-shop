@@ -82,9 +82,11 @@ def main [
   )
   print $"($bumps | length) channel bumps, ($releases | length) releases"
 
+  # A stable channel head or a flake.lock rev is not an unstable bump, so without its own row the index never reaches it.
   let rows = (
     $bumps
     | append $releases
+    | append [($pinned | merge { channel: "pin" })]
     | where $it.date <= $pinned.date
     | uniq-by rev
     | sort-by date rev
