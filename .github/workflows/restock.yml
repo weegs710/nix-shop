@@ -1,0 +1,152 @@
+name: Restock
+
+on:
+  schedule:
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Restock and validate, but commit and push nothing
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: restock
+  cancel-in-progress: false
+
+jobs:
+  restock:
+    # A dispatch from another branch would otherwise push that branch's tree onto main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+
+      - name: Clone nixpkgs
+        # Treeless keeps the clone near 0.6 GB against ~3.2 GB for a full bare one.
+        run: git clone --bare --filter=tree:0 --quiet https://github.com/NixOS/nixpkgs.git "$RUNNER_TEMP/nixpkgs.git"
+
+      - name: Restock
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/nix-index-database.lock" \
+            https://raw.githubusercontent.com/nix-community/nix-index-database/main/flake.lock
+          # An explicit pin, because restock would otherwise read this repo's own flake.lock and append nothing.
+          nix run .#restock -- \
+            --clone "$RUNNER_TEMP/nixpkgs.git" \
+            --pin nixos-unstable \
+            --nix-index-lock "$RUNNER_TEMP/nix-index-database.lock" \
+            --threads "$(nproc)"
+
+      - name: Check the index is complete
+        # Restock exits 0 when it stops at a revision it could not extract.
+        run: |
+          python3 - <<'PY'
+          import json, sys
+
+          revs = json.load(open("index/revisions.json"))
+          covered = json.load(open("index/versions.json"))["revisionCount"]
+          bare = sum("narHash" not in r for r in revs)
+          if covered != len(revs) or bare:
+              sys.exit(f"index incomplete: versions.json covers {covered} of {len(revs)} revisions, {bare} without a narHash")
+
+          paired = open("index/paired-rev").read().strip()
+          if paired not in {r["rev"] for r in revs}:
+              print(f"::warning::paired-rev {paired[:12]} is not in revisions.json")
+          PY
+
+      - name: Describe the change
+        id: describe
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+
+          def head(path):
+              return subprocess.run(["git", "show", f"HEAD:{path}"], capture_output=True, text=True, check=True).stdout
+
+          def pairs(v):
+              return sum(len(x) for x in v["attrs"].values())
+
+          old_revs, new_revs = json.loads(head("index/revisions.json")), json.load(open("index/revisions.json"))
+          old_v, new_v = json.loads(head("index/versions.json")), json.load(open("index/versions.json"))
+          old_p, new_p = head("index/paired-rev").strip(), open("index/paired-rev").read().strip()
+
+          lines = []
+          if old_revs != new_revs:
+              line = f"- index/revisions.json: {len(new_revs) - len(old_revs):+d} revisions, {len(old_revs)} -> {len(new_revs)}"
+              if old_revs[-1]["rev"] != new_revs[-1]["rev"]:
+                  line += f", tip {old_revs[-1]['rev'][:12]} -> {new_revs[-1]['rev'][:12]}"
+              lines.append(line)
+          if old_v != new_v:
+              da = len(new_v["attrs"]) - len(old_v["attrs"])
+              dp = pairs(new_v) - pairs(old_v)
+              lines.append(f"- index/versions.json: {len(new_v['attrs']):,} attrs / {pairs(new_v):,} pairs, {da:+,} attrs and {dp:+,} pairs")
+          if old_p != new_p:
+              lines.append(f"- index/paired-rev: {old_p[:12]} -> {new_p[:12]}")
+
+          msg = f"chore(shop): restock to {new_revs[-1]['date']}\n\n" + "\n".join(lines) + "\n"
+          open(os.path.join(os.environ["RUNNER_TEMP"], "msg"), "w").write(msg)
+          print(msg if lines else "nothing changed")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"changed={'true' if lines else 'false'}\n")
+          PY
+
+      - name: Commit and push
+        if: ${{ !inputs.dry_run && steps.describe.outputs.changed == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index/revisions.json index/versions.json index/paired-rev
+          git commit --quiet --file "$RUNNER_TEMP/msg"
+          for _ in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main
+          done
+          echo "::error::push to main failed three times"
+          exit 1
+
+  mirror:
+    needs: restock
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # The deploy keys live in this environment, which only main may use.
+    environment: mirror
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push main to the mirrors
+        env:
+          CODEBERG_KEY: ${{ secrets.CODEBERG_DEPLOY_KEY }}
+          TANGLED_KEY: ${{ secrets.TANGLED_DEPLOY_KEY }}
+        run: |
+          umask 077
+          dir=$(mktemp -d "$RUNNER_TEMP/ssh.XXXXXX")
+          printf '%s\n' "$CODEBERG_KEY" > "$dir/codeberg"
+          printf '%s\n' "$TANGLED_KEY" > "$dir/tangled"
+          cat > "$dir/known_hosts" <<'EOF'
+          codeberg.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIVIC02vnjFyL+I4RHfvIGNtOgJMe769VTF1VR4EB3ZB
+          tangled.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAII2UShEm/FFPmYZUizaPnIqOJuynoCQpcLhl5PPHd02n
+          EOF
+
+          failed=0
+          mirror() {
+            GIT_SSH_COMMAND="ssh -i $dir/$1 -o IdentitiesOnly=yes -o UserKnownHostsFile=$dir/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes" \
+              git push "$2" main:refs/heads/main || failed=1
+          }
+          mirror codeberg git@codeberg.org:weegs710/nix-shop.git
+          mirror tangled git@tangled.org:weegs710.tngl.sh/nix-shop
+
+          rm -rf "$dir"
+          exit $failed
