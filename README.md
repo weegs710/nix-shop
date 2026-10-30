@@ -21,7 +21,7 @@ $ shop -s rg@15.1.0 jq@1.8.1               # one shell, each from its own nixpkg
 Try it without installing anything:
 
 ```bash
-nix run git+https://codeberg.org/weegs710/nix-shop#shop -- --help
+nix run github:weegs710/nix-shop#shop -- --help
 ```
 
 ## The Index
@@ -42,11 +42,11 @@ nix-shop merges concepts from all three and does what none of them do alone: **e
 
 nix-shop borrows ideas from three projects but needs only one of them at runtime.
 
-| Project            | Keep it?                   | Why                                                                                                                                                                                                              |
-| ------------------ | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| comma              | **No**                     | shop never calls comma. It reimplements comma's lookup in `lib/shop.nu` and leaves out the `NIX_PATH` branch that sends comma to the wrong nixpkgs. Keep comma only if you use it on its own.                    |
-| nixpkgs-multiverse | **No**                     | The engine is vendored in `lib/engine.nix`, and `restock` generates the index from NixOS's own release bucket and the nixpkgs git history. The flake takes no multiverse input.                                  |
-| nix-index-database | **Yes**, or an equivalent  | shop asks `nix-locate` which package ships a command, and that needs a database. shop bundles the nix-index program but not a database. The prebuilt one is the easy source, and building your own also works.    |
+| Project            | Keep it?                  | Why                                                                                                                                                                                                            |
+| ------------------ | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| comma              | **No**                    | shop never calls comma. It reimplements comma's lookup in `lib/shop.nu` and leaves out the `NIX_PATH` branch that sends comma to the wrong nixpkgs. Keep comma only if you use it on its own.                  |
+| nixpkgs-multiverse | **No**                    | The engine is vendored in `lib/engine.nix`, and `restock` generates the index from NixOS's own release bucket and the nixpkgs git history. The flake takes no multiverse input.                                |
+| nix-index-database | **Yes**, or an equivalent | shop asks `nix-locate` which package ships a command, and that needs a database. shop bundles the nix-index program but not a database. The prebuilt one is the easy source, and building your own also works. |
 
 So you can stop pinning comma and nixpkgs-multiverse on nix-shop's account. nix-shop's flake inputs are only `nixpkgs` and `nixpkgs-darwin`. It uses whichever `nix-locate` comes first on your `PATH`, and the revision it pairs with travels inside the index as `index/paired-rev`, so it needs no nix-index-database input of its own.
 
@@ -58,11 +58,11 @@ If you do use [nix-index-database](https://github.com/nix-community/nix-index-da
 
 `nix run` isn't tied to your nixpkgs. It runs from whatever ref you name, so `nix run github:NixOS/nixpkgs/nixos-25.11#ab-av1` and `nix run github:NixOS/nixpkgs/nixos-unstable#ab-av1` give you different versions. What you have to supply is the ref and the attribute name. shop works out both.
 
-| You have                       | `nix run`                                                          | `shop`                                              |
-| ------------------------------ | ------------------------------------------------------------------ | --------------------------------------------------- |
-| a command, like `ffprobe`      | needs an attribute, and `ffprobe` isn't one. It ships inside `ffmpeg` | asks the nix-index database which package ships it |
-| a version, like `jq` 1.5       | needs the channel, tag or commit that shipped it                   | finds the revision                                  |
-| an unfree package              | refuses unless `NIXPKGS_ALLOW_UNFREE=1` and `--impure` are set     | evaluates with `allowUnfree`                        |
+| You have                  | `nix run`                                                             | `shop`                                             |
+| ------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| a command, like `ffprobe` | needs an attribute, and `ffprobe` isn't one. It ships inside `ffmpeg` | asks the nix-index database which package ships it |
+| a version, like `jq` 1.5  | needs the channel, tag or commit that shipped it                      | finds the revision                                 |
+| an unfree package         | refuses unless `NIXPKGS_ALLOW_UNFREE=1` and `--impure` are set        | evaluates with `allowUnfree`                       |
 
 Command → attribute is nix-index's idea, not nix-shop's, and the credits below say so. What nix-shop adds is **version → revision**, plus keeping the name lookup and the build on the same tree.
 
@@ -118,7 +118,7 @@ As a flake input:
 
 ```nix
 {
-  inputs.nix-shop.url = "git+https://codeberg.org/weegs710/nix-shop";
+  inputs.nix-shop.url = "github:weegs710/nix-shop";
 
   outputs = { self, nixpkgs, nix-shop, ... }: {
     nixosConfigurations.yourhost = nixpkgs.lib.nixosSystem {
@@ -190,7 +190,12 @@ comma is reimplemented rather than copied, and nix-index is called off `PATH`, s
 
 `index/revisions.json` and `index/versions.json` are generated metadata about nixpkgs -- revisions, dates, hashes and version strings. They contain no nixpkgs source.
 
-## Links
+## Mirrors
 
+- GitHub: https://github.com/weegs710/nix-shop
 - Codeberg: https://codeberg.org/weegs710/nix-shop
-- Website: https://weegs.dev
+- Tangled: https://tangled.org/weegs710.tngl.sh/nix-shop
+
+## Website
+
+https://weegs.dev
