@@ -436,11 +436,32 @@ def resolve-named [tok: string]: nothing -> record {
   { picked: (parse-attr $given), version: ($bits | get -o 1) }
 }
 
+# An upstream process may be mid-prompt on the terminal, so a pipe consumer waits for its input, past 5s only while the terminal is hiding a secret, because an upstream that waits on us would otherwise deadlock.
+def wait-for-input [] {
+  if (is-terminal --stdin) or not (is-terminal --stderr) { return }
+  let gate = '
+    [ -p /dev/stdin ] || exit 0
+    until read -t 0; do
+      if [ "$SECONDS" -ge 5 ]; then
+        stty -a <&2 2>/dev/null | grep -Eq "(^|[ ;])-echo([ ;]|$)" || exit 0
+        [ "$SECONDS" -ge 300 ] && exit 0
+        sleep 0.2
+      else
+        sleep 0.02
+      fi
+    done
+  '
+  # A gate that cannot run must never stop shop, but Ctrl-C must, and try would otherwise swallow it.
+  try { ^($env.SHOP_BASH? | default "bash") -c $gate } catch {|e| if $e.exit_code? == -2 { exit 130 } }
+}
+
 def --wrapped main [...rest] {
   if ($rest | is-empty) {
     print -e (usage)
     exit 1
   }
+
+  wait-for-input
 
   let head = ($rest | first)
   if $head in ["-h" "--help"] { return (usage) }

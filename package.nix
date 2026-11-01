@@ -8,6 +8,7 @@
   makeWrapper,
   writers,
   nix-index,
+  bash,
   shopIndex ? ./index,
   shopPinned ? null,
 }:
@@ -48,5 +49,6 @@ runCommand "shop"
   ''
     makeWrapper ${unwrapped}/bin/shop $out/bin/shop \
       --set SHOP_ENGINE ${engine} \
+      --set SHOP_BASH ${bash}/bin/bash \
       --suffix PATH : ${lib.makeBinPath [ nix-index ]}
   ''
