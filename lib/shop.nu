@@ -39,8 +39,9 @@ def hint [msg: string] {
   print -e $"($c.d)($msg)($c.z)"
 }
 
+# input list reads /dev/tty, so a piped stdin is fine but no terminal is not.
 def interactive []: nothing -> bool {
-  (is-terminal --stdin) and (is-terminal --stderr)
+  (is-terminal --stderr) and (try { "" | save --append /dev/tty; true } catch { false })
 }
 
 # nushell repeats the header row at the bottom of any table past 25 rows.

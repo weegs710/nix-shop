@@ -126,7 +126,7 @@ Entries made by older versions have no date and show `-`. They keep working, and
 
 **This is a breaking change.**
 
-Before, when several packages shipped a command and shop had no terminal to ask on (a script, a pipe, a cron job, an agent), it took the first candidate and wrote it to the cache. That pick then stuck for every later run, and nothing said so. It now stops, exits 1, and lists the candidates:
+Before, when several packages shipped a command and shop had no terminal to ask on (a script, a cron job, an agent), it took the first candidate and wrote it to the cache. That pick then stuck for every later run, and nothing said so. It now stops, exits 1, and lists the candidates:
 
 ```console
 $ shop convert in.png out.jpg
@@ -145,7 +145,7 @@ or ask once from a real terminal:
   shop --pick convert
 ```
 
-**What breaks:** a non-interactive call for a command that several packages ship, with nothing remembered for it. It used to succeed with whichever package sorted first. It now fails. A command with one candidate, one already remembered, or one that resolves as an unfree attribute behaves as before.
+**What breaks:** a non-interactive call for a command that several packages ship, with nothing remembered for it. It used to succeed with whichever package sorted first. It now fails. A command with one candidate, one already remembered, or one that resolves as an unfree attribute behaves as before. A pipe on stdin is not a missing terminal: `fortune | shop cowsay` typed at a terminal still asks.
 
 **What to do instead:** name the package with `shop -a <attr.out> <cmd>`, or remember it once with `shop --cache set <cmd> <attr.out>` and keep calling `shop <cmd>`. A script that wants the old behaviour has to pick the package itself, because shop no longer will.
 
