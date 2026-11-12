@@ -8762,5 +8762,17 @@
   "date": "2026-11-07",
   "channel": "nixos-unstable",
   "narHash": "sha256-ziZn2PvCJE5JEEpqTdxXwJpPB+L3YqoCpTAMCzyaP3U="
+ },
+ {
+  "rev": "177d0540942fb205af6993b1d5fa0b57799e09f8",
+  "date": "2026-11-09",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-SvB8u5qaJAOwZZyZciqTVOg/rBoUs2w0sFTU6ED51AQ="
+ },
+ {
+  "rev": "d4f25a3e562008648d45bcf2d70bcc7422cad84e",
+  "date": "2026-11-11",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-x9sADJvoVG0L6RejZB+/BB4YiGZFBZrfTlhF4uBq1tQ="
  }
 ]
