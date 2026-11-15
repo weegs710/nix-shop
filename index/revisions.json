@@ -8774,5 +8774,11 @@
   "date": "2026-11-11",
   "channel": "nixos-unstable",
   "narHash": "sha256-x9sADJvoVG0L6RejZB+/BB4YiGZFBZrfTlhF4uBq1tQ="
+ },
+ {
+  "rev": "d5cc6833999746cffdfe0598f7bc801a57b887a9",
+  "date": "2026-11-13",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-Wpz/7x/YWnDIBu7yj6ixe8j6fIMsidd9Y+o1PqPF3iM="
  }
 ]
