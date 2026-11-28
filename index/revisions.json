@@ -8804,5 +8804,11 @@
   "date": "2026-11-21",
   "channel": "nixos-unstable",
   "narHash": "sha256-f/VVvxf5RsQgWVhUtefoca5ktVg0DA2bnkMOcmSnozo="
+ },
+ {
+  "rev": "58d0d3e9d527ca7263be6a45d1f86eacdc700dab",
+  "date": "2026-11-24",
+  "channel": "nixos-unstable",
+  "narHash": "sha256-fD1nLSQM8tFob51/thCOr49JIAIjoqybAY27/+hwZQI="
  }
 ]
